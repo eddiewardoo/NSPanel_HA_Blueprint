@@ -1,0 +1,40 @@
+#####################################################################################################
+##### NSPANEL STANDALONE - Home page chip (status icon on the top bar)                          #####
+#####                                                                                           #####
+##### The icon is shown while the entity is active (on/open/heat/playing/home...) and hidden    #####
+##### otherwise.                                                                                #####
+#####                                                                                           #####
+##### vars:                                                                                     #####
+#####   chip:       01 .. 07                                                                    #####
+#####   entity:     e.g. binary_sensor.front_door                                               #####
+#####   icon:       MDI code point, e.g. "\uE6E8"                                               #####
+#####   icon_color: "R, G, B" (default "200, 204, 200")                                         #####
+#####################################################################################################
+---
+defaults:
+  icon_color: "200, 204, 200"
+
+text_sensor:
+  - id: sa_home_chip${chip}_state
+    platform: homeassistant
+    entity_id: ${entity}
+    internal: true
+    on_value:
+      then:
+        - script.execute: sa_home_chip${chip}_refresh
+
+script:
+  - id: !extend page_home
+    then:
+      - script.execute: sa_home_chip${chip}_refresh
+
+  - id: sa_home_chip${chip}_refresh
+    mode: restart
+    then:
+      - lambda: |-
+          if (!is_device_ready_for_tasks()) return;
+          const bool on = id(standalone_is_on)(id(sa_home_chip${chip}_state).state);
+          disp1->set_component_text("home.chip${chip}", on ? "${icon}" : " ");
+          disp1->set_component_font_color("home.chip${chip}",
+                                          on ? rgbTo565(std::vector<int32_t>{${icon_color}}) : Colors::BLACK);
+...

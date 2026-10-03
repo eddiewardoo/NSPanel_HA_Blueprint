@@ -1,0 +1,56 @@
+#####################################################################################################
+##### NSPANEL STANDALONE - Home page custom button (button01 .. button07)                       #####
+#####                                                                                           #####
+##### Short press toggles the entity (homeassistant.toggle). Long press is ignored.             #####
+##### Requires "Allow the device to perform Home Assistant actions" in the ESPHome integration. #####
+#####                                                                                           #####
+##### vars:                                                                                     #####
+#####   button:         01 .. 07                                                                #####
+#####   entity:         e.g. light.desk                                                         #####
+#####   icon:           MDI code point                                                          #####
+#####   icon_color_on:  "R, G, B" (default "0, 128, 248")                                       #####
+#####   icon_color_off: "R, G, B" (default "200, 204, 200")                                     #####
+#####   action:         HA action for a short press (default homeassistant.toggle)              #####
+#####################################################################################################
+---
+defaults:
+  icon_color_on: "0, 128, 248"
+  icon_color_off: "200, 204, 200"
+  action: homeassistant.toggle
+
+text_sensor:
+  - id: sa_home_button${button}_state
+    platform: homeassistant
+    entity_id: ${entity}
+    internal: true
+    on_value:
+      then:
+        - script.execute: sa_home_button${button}_refresh
+
+script:
+  - id: !extend page_home
+    then:
+      - script.execute: sa_home_button${button}_refresh
+
+  - id: sa_home_button${button}_refresh
+    mode: restart
+    then:
+      - lambda: |-
+          if (!is_device_ready_for_tasks()) return;
+          const bool on = id(standalone_is_on)(id(sa_home_button${button}_state).state);
+          disp1->set_component_text("home.button${button}", "${icon}");
+          disp1->set_component_font_color("home.button${button}",
+                                          rgbTo565(on ? std::vector<int32_t>{${icon_color_on}}
+                                                      : std::vector<int32_t>{${icon_color_off}}));
+
+  - id: !extend standalone_click
+    then:
+      - if:
+          condition:
+            - lambda: return page == "home" and event == "short_click" and component == "button${button}";
+          then:
+            - homeassistant.action:
+                action: ${action}
+                data:
+                  entity_id: ${entity}
+...

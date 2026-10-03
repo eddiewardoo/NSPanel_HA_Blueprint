@@ -1,0 +1,356 @@
+#####################################################################################################
+##### NSPANEL ESPHOME - STANDALONE MODE (no Home Assistant blueprint automation required)       #####
+##### Base package: replaces the blueprint's boot-time settings with local substitutions.       #####
+#####                                                                                           #####
+##### Every value below is a default. Override any of them in your device YAML `substitutions:` #####
+##### See standalone/README.md for the full guide.                                              #####
+#####################################################################################################
+#
+# How it works:
+#   On boot the panel normally fires an `esphome.nspanel_ha_blueprint` event (type: boot) and waits
+#   until the blueprint has pushed ~50 settings (colors, fonts, relay/button config, version...).
+#   This package hooks into that request and applies the same settings locally, so the panel boots
+#   and runs without the blueprint automation (and also without Home Assistant, if needed).
+#
+#   Feature packages (chips, values, buttons pages, entities pages, hardware buttons, weather...)
+#   hook into the scripts defined here:
+#     - standalone_apply_settings  -> runs once at boot (after the built-in settings)
+#     - standalone_page_render     -> runs every time a page is shown
+#     - standalone_click           -> runs on every click event coming from the display
+#     - page_home (core script)    -> runs when Home is shown and on embedded thermostat changes
+#
+# Colors are "R, G, B" strings (0-255 each).
+# Icons are Material Design Icons code points, e.g. "\uE6E8" (see standalone/README.md for lookup).
+---
+substitutions:
+  ##### Date & time #####
+  time_format: "%H:%M"                       # e.g. "%H:%M", "%-H:%M", "%-I:%M %p"
+  date_format: "%A, %d.%m"                   # strftime format. %A/%a/%B/%b use the names below
+  meridiem_am: "AM"
+  meridiem_pm: "PM"
+  weekday_names: '"Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"'
+  weekday_names_short: '"Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"'
+  month_names: '"January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"'
+  month_names_short: '"Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"'
+  date_label_color: "255, 255, 255"
+  time_label_color: "255, 255, 255"
+
+  ##### Global #####
+  decimal_separator: "."
+  display_temperature_unit: "°C"             # "°C" or "°F" (text used on climate pages)
+
+  ##### Home page - general #####
+  chip_font_size: "7"                        # 7 (small) / 8 (medium) / 10 (large)
+  custom_buttons_font_size: "8"              # 8 (small) / 9 (medium) / 10 (large)
+  home_outdoor_temp_font: "4"                # 4 (default) / 5 / 6 (larger)
+  home_outdoor_temp_label_color: "255, 255, 255"
+  home_indoor_temp_label_color: "255, 255, 255"
+  home_indoor_temp_icon: "\uE50E"            # mdi:thermometer
+  home_indoor_temp_icon_color: "255, 255, 255"
+  embedded_indoor_temperature: "true"        # Show the panel's own sensor as indoor temperature
+
+  ##### Home page - buttons on the right side #####
+  entities_pages_icon: "\uEDCF"              # mdi:format-list-bulleted-square
+  entities_pages_icon_color: "200, 204, 200"
+  notification_icon_color_normal: "200, 204, 200"
+  notification_icon_color_unread: "248, 0, 0"
+  qrcode_enabled: "false"                    # Content/title: core substitutions qrcode_initial_value / qrcode_title_initial_value
+  qrcode_icon: "\uE432"                      # mdi:qrcode-scan
+  qrcode_icon_color: "200, 204, 200"
+  utilities_enabled: "false"                 # The utilities page needs live data from the blueprint - keep disabled
+  utilities_icon: "\uE299"                   # mdi:gauge
+  utilities_icon_color: "200, 204, 200"
+
+  ##### Relays #####
+  relay01_icon: "\uE3A4"                     # mdi:numeric-1-box-outline
+  relay01_icon_color: "255, 255, 255"
+  relay02_icon: "\uE3A8"                     # mdi:numeric-2-box-outline
+  relay02_icon_color: "255, 255, 255"
+  left_button_controls_relay1: "false"       # Left hardware button toggles relay 1 locally
+  relay_1_local_fallback: "false"            # ... only when Wi-Fi/API is down
+  right_button_controls_relay2: "false"      # Right hardware button toggles relay 2 locally
+  relay_2_local_fallback: "false"            # ... only when Wi-Fi/API is down
+
+  ##### Hardware buttons (bars & labels) #####
+  left_button_name: ""
+  left_button_color: "200, 204, 200"
+  left_button_bar_visible: "false"           # Forced to true when a hw_button package is used for that side
+  right_button_name: ""
+  right_button_color: "200, 204, 200"
+  right_button_bar_visible: "false"
+  hw_buttons_bar_color_on: "31, 169, 255"
+  hw_buttons_bar_color_off: "44, 44, 44"
+  hw_buttons_bars_pages: "268435454"         # Bit mask of page ids where the bars are shown (default: all but boot)
+
+  ##### Climate #####
+  is_climate: "false"                        # A climate is assigned (tap on indoor temp opens the climate page)
+  embedded_climate: "false"                  # That climate is the panel's built-in thermostat (climate add-on)
+  climate_friendly_name: "Thermostat"
+  climate_page_button_font_size: "8"         # 8 / 9 / 10
+
+  ##### Screensaver #####
+  screensaver_display_time: "false"
+  screensaver_display_time_font_size: "6"    # 6 / 7 / 8 / 9 / 10
+  screensaver_display_time_font_color: "64, 64, 64"
+  screensaver_background_color: "0, 0, 0"
+
+  ##### Pages labels #####
+  buttonpage01_label: ""
+  buttonpage02_label: ""
+  buttonpage03_label: ""
+  buttonpage04_label: ""
+  entitypage01_label: ""
+  entitypage02_label: ""
+  entitypage03_label: ""
+  entitypage04_label: ""
+  entitypages_value_alignment: "0"           # 0 = right, 1 = center, 2 = left
+  button_pages_icon_size: "8"                # 8 (small) / 10 (large)
+
+  TAG_STANDALONE: nspanel.standalone
+
+esphome:
+  platformio_options:
+    build_flags:
+      - -D NSPANEL_HA_BLUEPRINT_STANDALONE
+
+globals:
+  # Helpers shared by the feature packages
+  - id: standalone_is_on  # True when a Home Assistant state should be shown as "active"
+    type: std::function<bool(const std::string &)>
+    initial_value: |-
+      [](const std::string &s) -> bool {
+        return !(s.empty() or s == "off" or s == "closed" or s == "unavailable" or s == "unknown" or
+                 s == "idle" or s == "standby" or s == "locked" or s == "not_home" or s == "disarmed" or
+                 s == "paused" or s == "none" or s == "0");
+      }
+  - id: standalone_format_value  # Formats a state: numbers rounded + unit, others as-is
+    type: std::function<std::string(const std::string &, int, const std::string &, const std::string &, const std::string &)>
+    initial_value: |-
+      [](const std::string &s, int decimals, const std::string &unit,
+         const std::string &separator, const std::string &unavailable) -> std::string {
+        if (s.empty() or s == "unavailable" or s == "unknown") return unavailable;
+        char *end = nullptr;
+        const float f = strtof(s.c_str(), &end);
+        if (end == s.c_str() or *end != '\0') return s;  // Not a number
+        char buffer[24];
+        snprintf(buffer, sizeof(buffer), "%.*f", decimals, f);
+        return nspanel_ha_blueprint::adjustDecimalSeparator(std::string(buffer) + unit,
+                                                            separator.empty() ? '.' : separator[0]);
+      }
+
+script:
+  ##### Hook the blueprint settings request #####
+  - id: !extend boot_request_blueprint_settings
+    then:
+      - lambda: |-
+          if (system_flags.blueprint_ready or blueprint_status_flags.all_active_flags_set()) return;
+          standalone_apply_settings->execute();
+
+  ##### Boot settings - same values the blueprint sends with `page: mem` #####
+  - id: standalone_apply_settings
+    mode: single
+    then:
+      - lambda: |-
+          ESP_LOGI("${TAG_STANDALONE}", "Applying standalone settings");
+          using Rgb = std::vector<int32_t>;
+
+          // Date & time
+          action_component_color->execute("mem", "date_color", rgbTo565(Rgb{${date_label_color}}));
+          action_component_color->execute("mem", "time_color", rgbTo565(Rgb{${time_label_color}}));
+          action_component_text->execute("mem", "time_format", "${time_format}");
+          action_component_text->execute("mem", "meridiem_am", "${meridiem_am}");
+          action_component_text->execute("mem", "meridiem_pm", "${meridiem_pm}");
+          feed_wdt_delay(${DELAY_DEFAULT});
+
+          // Home page fonts
+          action_component_val->execute("mem", "chip_font", ${chip_font_size});
+          action_component_val->execute("mem", "custom_buttons_font", ${custom_buttons_font_size});
+          action_component_val->execute("mem", "outdoor_temp_font", ${home_outdoor_temp_font});
+          feed_wdt_delay(${DELAY_DEFAULT});
+
+          // Home page buttons (entities / utilities / notifications / QR code)
+          action_component_text->execute("mem", "entities_pages_icon", "${entities_pages_icon}");
+          action_component_color->execute("mem", "entities_pages_icon_color", rgbTo565(Rgb{${entities_pages_icon_color}}));
+          action_component_val->execute("mem", "utilities_enabled", ${utilities_enabled} ? 1 : 0);
+          action_component_text->execute("mem", "utilities_icon", "${utilities_icon}");
+          action_component_color->execute("mem", "utilities_icon_color", rgbTo565(Rgb{${utilities_icon_color}}));
+          action_component_color->execute("mem", "notification_icon_color_normal",
+                                          rgbTo565(Rgb{${notification_icon_color_normal}}));
+          action_component_color->execute("mem", "notification_icon_color_unread",
+                                          rgbTo565(Rgb{${notification_icon_color_unread}}));
+          action_component_text->execute("mem", "qrcode_icon", "${qrcode_icon}");
+          action_component_color->execute("mem", "qrcode_icon_color", rgbTo565(Rgb{${qrcode_icon_color}}));
+          action_component_val->execute("mem", "qrcode_enabled", ${qrcode_enabled} ? 1 : 0);
+          feed_wdt_delay(${DELAY_DEFAULT});
+
+          // Outdoor / indoor temperature labels
+          action_component_color->execute("home", "outdoor_temp", rgbTo565(Rgb{${home_outdoor_temp_label_color}}));
+          action_component_color->execute("home", "indr_temp", rgbTo565(Rgb{${home_indoor_temp_label_color}}));
+          action_component_text->execute("home", "indr_temp_icon", "${home_indoor_temp_icon}");
+          action_component_color->execute("home", "indr_temp_icon", rgbTo565(Rgb{${home_indoor_temp_icon_color}}));
+          feed_wdt_delay(${DELAY_DEFAULT});
+
+          // Hardware buttons labels
+          action_component_color->execute("home", "left_bt_text", rgbTo565(Rgb{${left_button_color}}));
+          action_component_text->execute("home", "left_bt_text", "${left_button_name}");
+          action_component_color->execute("home", "right_bt_text", rgbTo565(Rgb{${right_button_color}}));
+          action_component_text->execute("home", "right_bt_text", "${right_button_name}");
+          feed_wdt_delay(${DELAY_DEFAULT});
+
+          // Relays
+          action_component_text->execute("mem", "relay1_icon", "${relay01_icon}");
+          action_component_text->execute("mem", "relay2_icon", "${relay02_icon}");
+          action_component_color->execute("mem", "relay1_icon_color", rgbTo565(Rgb{${relay01_icon_color}}));
+          action_component_color->execute("mem", "relay2_icon_color", rgbTo565(Rgb{${relay02_icon_color}}));
+          action_component_val->execute("mem", "relay_settings",
+                                        ((${left_button_controls_relay1}) ? 1 : 0) << 0 |
+                                        ((${relay_1_local_fallback}) ? 1 : 0) << 1 |
+                                        ((${right_button_controls_relay2}) ? 1 : 0) << 4 |
+                                        ((${relay_2_local_fallback}) ? 1 : 0) << 5);
+          feed_wdt_delay(${DELAY_DEFAULT});
+
+          // Climate
+          action_component_val->execute("mem", "is_climate", ${is_climate} ? 1 : 0);
+          action_component_val->execute("mem", "embedded_climate", ${embedded_climate} ? 1 : 0);
+          action_component_val->execute("mem", "embedded_indoor_temperature", ${embedded_indoor_temperature} ? 1 : 0);
+          #ifdef NSPANEL_HA_BLUEPRINT_ADDON_CLIMATE_BASE
+          action_component_text->execute("mem", "addon_climate_friendly_name", "${climate_friendly_name}");
+          #endif
+          action_component_val->execute("climate", "button_font", ${climate_page_button_font_size});
+          feed_wdt_delay(${DELAY_DEFAULT});
+
+          // Hardware buttons bars
+          action_component_color->execute("mem", "button_bar_color_on", rgbTo565(Rgb{${hw_buttons_bar_color_on}}));
+          action_component_color->execute("mem", "button_bar_color_off", rgbTo565(Rgb{${hw_buttons_bar_color_off}}));
+          action_component_val->execute("mem", "button_left", ${left_button_bar_visible} ? 1 : 0);
+          action_component_val->execute("mem", "button_right", ${right_button_bar_visible} ? 1 : 0);
+          action_component_val->execute("mem", "buttons_bars_pages", ${hw_buttons_bars_pages});
+          feed_wdt_delay(${DELAY_DEFAULT});
+
+          // Global settings
+          action_component_text->execute("mem", "decimal_separator", "${decimal_separator}");
+          action_component_text->execute("mem", "temp_unit", "${display_temperature_unit}");
+          action_component_val->execute("mem", "ent_value_xcen", ${entitypages_value_alignment});
+          feed_wdt_delay(${DELAY_DEFAULT});
+
+          // Screensaver
+          action_component_color->execute("screensaver", "text", rgbTo565(Rgb{${screensaver_display_time_font_color}}));
+          action_component_val->execute("mem", "screensaver_display_time", ${screensaver_display_time} ? 1 : 0);
+          action_component_val->execute("mem", "screensaver_time_font", ${screensaver_display_time_font_size});
+          action_component_color->execute("screensaver", "screensaver_bco", rgbTo565(Rgb{${screensaver_background_color}}));
+          feed_wdt_delay(${DELAY_DEFAULT});
+
+          // Buttons/entities pages are disabled unless a package enables them
+          for (uint8_t i = 1; i <= 4; i++) {
+            disp1->send_command_printf("is_buttonpage%02u=0", i);
+            disp1->send_command_printf("is_entitypage%02u=0", i);
+          }
+      - lambda: |-
+          // Report the "blueprint" version, which completes the boot handshake
+          action_component_text->execute("mem", "ver_blueprint", "${version}");
+          ESP_LOGI("${TAG_STANDALONE}", "Standalone settings applied");
+      # Extended by feature packages
+
+  ##### Date - rendered locally (blueprint used to send it) #####
+  - id: !extend refresh_datetime
+    then:
+      - lambda: |-
+          if (system_flags.tft_upload_active) return;
+          const ESPTime now = id(time_provider).now();
+          if (!now.is_valid()) return;
+          static const char *const weekdays[] = {${weekday_names}};
+          static const char *const weekdays_short[] = {${weekday_names_short}};
+          static const char *const months[] = {${month_names}};
+          static const char *const months_short[] = {${month_names_short}};
+          std::string fmt = "${date_format}";
+          auto replace_all = [&fmt](const std::string &token, const std::string &value) {
+            size_t pos;
+            while ((pos = fmt.find(token)) != std::string::npos) fmt.replace(pos, token.length(), value);
+          };
+          replace_all("%A", weekdays[now.day_of_week - 1]);
+          replace_all("%a", weekdays_short[now.day_of_week - 1]);
+          replace_all("%B", months[now.month - 1]);
+          replace_all("%b", months_short[now.month - 1]);
+          disp1->set_component_text("home.date", now.strftime(fmt).c_str());
+
+  ##### Pages and clicks dispatch #####
+  - id: !extend page_change
+    then:
+      - lambda: standalone_page_render->execute();
+
+  - id: standalone_page_render
+    mode: restart
+    then:
+      - delay: ${DELAY_DEFAULT}ms
+      - lambda: |-
+          if (!is_device_ready_for_tasks()) return;
+          const std::string &page = current_page->state;
+          static const std::map<std::string, std::string> labels = {
+            {"buttonpage01", "${buttonpage01_label}"}, {"buttonpage02", "${buttonpage02_label}"},
+            {"buttonpage03", "${buttonpage03_label}"}, {"buttonpage04", "${buttonpage04_label}"},
+            {"entitypage01", "${entitypage01_label}"}, {"entitypage02", "${entitypage02_label}"},
+            {"entitypage03", "${entitypage03_label}"}, {"entitypage04", "${entitypage04_label}"},
+          };
+          auto it = labels.find(page);
+          if (it != labels.end() and !it->second.empty())
+            disp1->set_component_text("page_label", it->second.c_str());
+      # Extended by feature packages
+
+  - id: !extend event_from_display
+    then:
+      - lambda: |-
+          if (params_count == 3)
+            standalone_click->execute(params[0], params[1], params[2]);
+
+  - id: standalone_click
+    mode: queued
+    max_runs: 5
+    parameters:
+      page: string
+      event: string
+      component: string
+    then:
+      - lambda: |-
+          ESP_LOGD("${TAG_STANDALONE}", "Click: %s / %s / %s", page.c_str(), event.c_str(), component.c_str());
+      # Extended by feature packages
+
+  - id: standalone_draw_button  # Draws one button on a buttons page (same as the `button` API action)
+    mode: queued
+    max_runs: 8
+    parameters:
+      page: string
+      component: string
+      state: bool
+      icon: string
+      icon_color: uint16_t
+      label: string
+    then:
+      - lambda: |-
+          if (current_page->state != page) return;
+          const std::string cid = component;
+          disp1->set_component_picc((cid + "pic").c_str(), state ? 47 : 46);
+          disp1->set_component_picc((cid + "bri").c_str(), state ? 47 : 46);
+          disp1->set_component_picc((cid + "text").c_str(), state ? 47 : 46);
+          disp1->set_component_picc((cid + "icon").c_str(), state ? 47 : 46);
+          disp1->set_component_font((cid + "icon").c_str(), ${button_pages_icon_size});
+          disp1->set_component_foreground_color((cid + "bri").c_str(), state ? ${COLOR_BLUE_INDIGO} : ${COLOR_WHITE});
+          disp1->set_component_foreground_color((cid + "text").c_str(), state ? ${COLOR_BLUE_INDIGO} : ${COLOR_WHITE});
+          disp1->set_component_font_color((cid + "icon").c_str(), icon_color);
+          disp1->set_component_text((cid + "icon").c_str(), icon.c_str());
+          feed_wdt_delay(${DELAY_SHORT});
+          disp1->set_component_text((cid + "text").c_str(), wrapText(label.c_str(), 10, id(mui_bytes_per_char)).c_str());
+          disp1->set_component_text((cid + "bri").c_str(), " ");
+          disp1->send_command_printf("vis %spic,1", cid.c_str());
+          disp1->send_command_printf("vis %sicon,1", cid.c_str());
+          disp1->send_command_printf("vis %stext,1", cid.c_str());
+          disp1->send_command_printf("vis %sbri,1", cid.c_str());
+          disp1->send_command_printf("vis %s,1", cid.c_str());
+
+  - id: !extend stop_all
+    then:
+      - lambda: |-
+          standalone_apply_settings->stop();
+          standalone_page_render->stop();
+          standalone_click->stop();
+          standalone_draw_button->stop();
+...

@@ -1,0 +1,53 @@
+#####################################################################################################
+##### NSPANEL STANDALONE - Home page value (value01 .. value04) from a sensor on the panel      #####
+#####                                                                                           #####
+##### Works fully offline (no Home Assistant needed).                                           #####
+#####                                                                                           #####
+##### vars:                                                                                     #####
+#####   value:       01 .. 04                                                                   #####
+#####   sensor_id:   id of a numeric sensor in this ESPHome config (e.g. humidity_nspanel)      #####
+#####   icon:        MDI code point, e.g. "\uE58D" (mdi:water-percent)                          #####
+#####   unit:        text appended to the value (default "")                                    #####
+#####   decimals:    decimals (default 1)                                                       #####
+#####   icon_color:  "R, G, B" (default "200, 204, 200")                                        #####
+#####   label_color: "R, G, B" (default "200, 204, 200")                                        #####
+#####################################################################################################
+---
+defaults:
+  unit: ""
+  decimals: "1"
+  icon_color: "200, 204, 200"
+  label_color: "200, 204, 200"
+
+sensor:
+  - id: sa_home_value${value}_local
+    platform: copy
+    source_id: ${sensor_id}
+    internal: true
+    on_value:
+      then:
+        - script.execute: sa_home_value${value}_refresh
+
+script:
+  - id: !extend page_home
+    then:
+      - script.execute: sa_home_value${value}_refresh
+
+  - id: sa_home_value${value}_refresh
+    mode: restart
+    then:
+      - lambda: |-
+          if (!is_device_ready_for_tasks()) return;
+          const float v = id(sa_home_value${value}_local).state;
+          std::string txt = id(mui_unavailable);
+          if (!std::isnan(v)) {
+            char buffer[24];
+            snprintf(buffer, sizeof(buffer), "%.*f", ${decimals}, v);
+            txt = adjustDecimalSeparator(std::string(buffer) + "${unit}",
+                                         id(mui_decimal_separator).empty() ? '.' : id(mui_decimal_separator)[0]);
+          }
+          disp1->set_component_text("home.value${value}_icon", "${icon}");
+          disp1->set_component_font_color("home.value${value}_icon", rgbTo565(std::vector<int32_t>{${icon_color}}));
+          disp1->set_component_font_color("home.value${value}", rgbTo565(std::vector<int32_t>{${label_color}}));
+          disp1->set_component_text("home.value${value}", txt.c_str());
+...

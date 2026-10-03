@@ -1,0 +1,57 @@
+#####################################################################################################
+##### NSPANEL STANDALONE - Home page weather picture                                            #####
+#####                                                                                           #####
+##### vars:                                                                                     #####
+#####   weather_entity: e.g. weather.home                                                       #####
+#####   sun_entity:     default sun.sun (day/night pictures)                                    #####
+#####                                                                                           #####
+##### Note: the weather pages (swipe from home) need forecast data and are not supported.       #####
+#####################################################################################################
+---
+defaults:
+  sun_entity: sun.sun
+
+text_sensor:
+  - id: sa_weather_state
+    platform: homeassistant
+    entity_id: ${weather_entity}
+    internal: true
+    on_value:
+      then:
+        - script.execute: sa_weather_refresh
+
+  - id: sa_sun_state
+    platform: homeassistant
+    entity_id: ${sun_entity}
+    internal: true
+    on_value:
+      then:
+        - script.execute: sa_weather_refresh
+
+script:
+  - id: !extend page_home
+    then:
+      - script.execute: sa_weather_refresh
+
+  - id: sa_weather_refresh
+    mode: restart
+    then:
+      - lambda: |-
+          if (!is_device_ready_for_tasks()) return;
+          const std::string &w = id(sa_weather_state).state;
+          const bool day = id(sa_sun_state).state != "below_horizon";
+          uint8_t pic = 1;  // unknown / unavailable
+          if (w == "sunny") pic = day ? 2 : 15;
+          else if (w == "cloudy") pic = 3;
+          else if (w == "rainy") pic = 4;
+          else if (w == "pouring") pic = 5;
+          else if (w == "snowy") pic = 6;
+          else if (w == "hail" or w == "snowy-rainy" or w == "snowy_rainy") pic = 7;
+          else if (w == "fog") pic = 8;
+          else if (w == "windy" or w == "windy-variant" or w == "windy_variant") pic = 9;
+          else if (w == "lightning") pic = 10;
+          else if (w == "partlycloudy") pic = day ? 11 : 12;
+          else if (w == "lightning-rainy" or w == "lightning_rainy" or w == "exceptional") pic = day ? 13 : 14;
+          else if (w == "clear-night" or w == "clear_night") pic = 15;
+          disp1->send_command_printf("home.weather.pic=%u", pic);
+...

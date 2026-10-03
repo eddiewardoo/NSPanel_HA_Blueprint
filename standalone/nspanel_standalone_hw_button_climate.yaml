@@ -1,0 +1,48 @@
+#####################################################################################################
+##### NSPANEL STANDALONE - Hardware button controlling the embedded thermostat (climate add-on) #####
+#####                                                                                           #####
+##### Works fully offline. Short press toggles between `on_mode` and OFF.                       #####
+#####                                                                                           #####
+##### vars:                                                                                     #####
+#####   side:    left | right                                                                   #####
+#####   on_mode: HEAT | COOL | HEAT_COOL | AUTO (default: HEAT)                                 #####
+#####################################################################################################
+---
+defaults:
+  on_mode: HEAT
+
+script:
+  - id: !extend standalone_apply_settings
+    then:
+      - lambda: |-
+          action_component_val->execute("mem", "button_${side}", 1);
+          sa_hw_button_${side}_climate_refresh->execute();
+
+  - id: !extend button_${side}_press_short
+    then:
+      - lambda: |-
+          auto call = thermostat_embedded->make_call();
+          call.set_mode(thermostat_embedded->mode == climate::CLIMATE_MODE_OFF
+                          ? climate::CLIMATE_MODE_${on_mode}
+                          : climate::CLIMATE_MODE_OFF);
+          call.perform();
+          sa_hw_button_${side}_climate_refresh->execute();
+
+  # The climate add-on runs page_home on every thermostat change
+  - id: !extend page_home
+    then:
+      - lambda: sa_hw_button_${side}_climate_refresh->execute();
+
+  - id: sa_hw_button_${side}_climate_refresh
+    mode: restart
+    then:
+      - lambda: |-
+          const bool on = thermostat_embedded->mode != climate::CLIMATE_MODE_OFF;
+          if ("${side}" == std::string("left")) {
+            id(hardware_settings).button_left_state = on;
+            refresh_hardware_buttons_bars->execute(1);
+          } else {
+            id(hardware_settings).button_right_state = on;
+            refresh_hardware_buttons_bars->execute(2);
+          }
+...
