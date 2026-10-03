@@ -256,7 +256,7 @@ script:
     then:
       - lambda: |-
           if (system_flags.tft_upload_active) return;
-          const ESPTime now = id(time_provider).now();
+          ESPTime now = id(time_provider).now();
           if (!now.is_valid()) return;
           static const char *const weekdays[] = {${weekday_names}};
           static const char *const weekdays_short[] = {${weekday_names_short}};
