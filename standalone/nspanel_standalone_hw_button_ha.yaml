@@ -1,0 +1,53 @@
+#####################################################################################################
+##### NSPANEL STANDALONE - Hardware button controlling a Home Assistant entity                  #####
+#####                                                                                           #####
+##### vars:                                                                                     #####
+#####   side:   left | right                                                                    #####
+#####   entity: entity to toggle with a short press (e.g. light.office)                         #####
+#####   state_entity: entity whose state lights up the bar (default: same as entity)            #####
+#####                                                                                           #####
+##### Requires "Allow the device to perform Home Assistant actions" in the ESPHome integration. #####
+##### Button label/color: substitutions left_button_name / right_button_name in the base.       #####
+#####################################################################################################
+---
+defaults:
+  state_entity: ${entity}
+
+text_sensor:
+  - id: sa_hw_button_${side}_state
+    platform: homeassistant
+    entity_id: ${state_entity}
+    internal: true
+    on_value:
+      then:
+        - lambda: |-
+            const bool on = id(standalone_is_on)(x);
+            if ("${side}" == std::string("left")) {
+              id(hardware_settings).button_left_state = on;
+              refresh_hardware_buttons_bars->execute(1);
+            } else {
+              id(hardware_settings).button_right_state = on;
+              refresh_hardware_buttons_bars->execute(2);
+            }
+
+script:
+  - id: !extend standalone_apply_settings
+    then:
+      - lambda: |-
+          action_component_val->execute("mem", "button_${side}", 1);
+
+  - id: !extend button_${side}_press_short
+    then:
+      - if:
+          condition:
+            - lambda: return system_flags.api_ready;
+          then:
+            - logger.log:
+                level: INFO
+                tag: ${TAG_STANDALONE}
+                format: "Hardware button ${side} -> homeassistant.toggle ${entity}"
+            - homeassistant.action:
+                action: homeassistant.toggle
+                data:
+                  entity_id: ${entity}
+...

@@ -1,0 +1,55 @@
+#####################################################################################################
+##### NSPANEL STANDALONE - Entities page row (blueprint "entities_entity01" .. "32")            #####
+#####                                                                                           #####
+##### Display only (icon, name and state), same as the blueprint.                               #####
+#####                                                                                           #####
+##### vars:                                                                                     #####
+#####   page:       01 .. 04                                                                    #####
+#####   row:        01 .. 08                                                                    #####
+#####   entity:     e.g. sensor.office_co2                                                      #####
+#####   name:       label                                                                       #####
+#####   icon:       MDI code point                                                              #####
+#####   unit:       text appended to numeric values (default "")                                #####
+#####   decimals:   decimals for numeric values (default 1)                                     #####
+#####   icon_color: "R, G, B" (default "200, 204, 200")                                         #####
+#####################################################################################################
+---
+defaults:
+  unit: ""
+  decimals: "1"
+  icon_color: "200, 204, 200"
+
+text_sensor:
+  - id: sa_ep${page}_row${row}_state
+    platform: homeassistant
+    entity_id: ${entity}
+    internal: true
+    on_value:
+      then:
+        - lambda: |-
+            if (current_page->state == "entitypage${page}") sa_ep${page}_row${row}_draw->execute();
+
+script:
+  - id: !extend standalone_apply_settings
+    then:
+      - lambda: disp1->send_command("is_entitypage${page}=1");
+
+  - id: !extend standalone_page_render
+    then:
+      - lambda: |-
+          if (current_page->state == "entitypage${page}") sa_ep${page}_row${row}_draw->execute();
+
+  - id: sa_ep${page}_row${row}_draw
+    mode: restart
+    then:
+      - lambda: |-
+          if (current_page->state != "entitypage${page}") return;
+          disp1->set_component_text("value${row}_icon", "${icon}");
+          disp1->set_component_font_color("value${row}_icon", rgbTo565(std::vector<int32_t>{${icon_color}}));
+          disp1->set_component_text("value${row}_label", "${name}");
+          // Through action_component_text so the core adjusts the font size to the text length
+          action_component_text->execute("entitypage${page}", "value${row}",
+                                         id(standalone_format_value)(id(sa_ep${page}_row${row}_state).state,
+                                                                     ${decimals}, "${unit}",
+                                                                     id(mui_decimal_separator), id(mui_unavailable)));
+...

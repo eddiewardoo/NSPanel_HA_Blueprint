@@ -1,0 +1,78 @@
+#####################################################################################################
+##### NSPANEL STANDALONE - Buttons page button (blueprint "entity01" .. "entity32")             #####
+#####                                                                                           #####
+##### Blueprint mapping: entity01-08 = buttonpage01, entity09-16 = buttonpage02,               #####
+#####                    entity17-24 = buttonpage03, entity25-32 = buttonpage04                 #####
+#####                                                                                           #####
+##### Short press runs `action` (default homeassistant.toggle) on the entity.                   #####
+##### With confirm: true the panel asks "Please confirm" first (built into the TFT).            #####
+##### Long press (detail pages for lights/covers/...) is not supported in standalone mode.      #####
+##### Requires "Allow the device to perform Home Assistant actions" in the ESPHome integration. #####
+#####                                                                                           #####
+##### vars:                                                                                     #####
+#####   page:           01 .. 04                                                                #####
+#####   button:         01 .. 08                                                                #####
+#####   entity:         e.g. switch.office_plug                                                 #####
+#####   name:           label shown on the button                                               #####
+#####   icon:           MDI code point                                                          #####
+#####   icon_color_on:  "R, G, B" (default "0, 128, 248")                                       #####
+#####   icon_color_off: "R, G, B" (default "200, 204, 200")                                     #####
+#####   confirm:        true | false (default false)                                            #####
+#####   action:         HA action for a short press (default homeassistant.toggle)              #####
+#####################################################################################################
+---
+defaults:
+  icon_color_on: "0, 128, 248"
+  icon_color_off: "200, 204, 200"
+  confirm: "false"
+  action: homeassistant.toggle
+
+text_sensor:
+  - id: sa_bp${page}_button${button}_state
+    platform: homeassistant
+    entity_id: ${entity}
+    internal: true
+    on_value:
+      then:
+        - lambda: |-
+            if (current_page->state == "buttonpage${page}") sa_bp${page}_button${button}_draw->execute();
+
+script:
+  - id: !extend standalone_apply_settings
+    then:
+      - lambda: disp1->send_command("is_buttonpage${page}=1");
+
+  - id: !extend standalone_page_render
+    then:
+      - lambda: |-
+          if (current_page->state != "buttonpage${page}") return;
+          if (${confirm}) {
+            // Bit (button - 1) of the page's `confirm` variable
+            disp1->send_command_printf("confirm.val=confirm.val|%u", 1u << (atoi("${button}") - 1));
+          }
+          sa_bp${page}_button${button}_draw->execute();
+
+  - id: sa_bp${page}_button${button}_draw
+    mode: restart
+    then:
+      - lambda: |-
+          const bool on = id(standalone_is_on)(id(sa_bp${page}_button${button}_state).state);
+          standalone_draw_button->execute("buttonpage${page}", "button${button}", on, "${icon}",
+                                          rgbTo565(on ? std::vector<int32_t>{${icon_color_on}}
+                                                      : std::vector<int32_t>{${icon_color_off}}),
+                                          "${name}");
+
+  - id: !extend standalone_click
+    then:
+      - if:
+          condition:
+            - lambda: return page == "buttonpage${page}" and event == "short_click" and component == "button${button}";
+          then:
+            - lambda: |-
+                ESP_LOGI("${TAG_STANDALONE}", "Click %s/%s -> ${action} ${entity}", page.c_str(), component.c_str());
+                if (!system_flags.api_ready) ESP_LOGW("${TAG_STANDALONE}", "Home Assistant API not connected");
+            - homeassistant.action:
+                action: ${action}
+                data:
+                  entity_id: ${entity}
+...

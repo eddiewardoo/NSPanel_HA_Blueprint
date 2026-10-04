@@ -1,0 +1,38 @@
+#####################################################################################################
+##### NSPANEL STANDALONE - Home page outdoor temperature                                        #####
+#####                                                                                           #####
+##### vars:                                                                                     #####
+#####   entity:   numeric sensor, e.g. sensor.outdoor_temperature                               #####
+#####   unit:     default "°C"                                                                  #####
+#####   decimals: default 1                                                                     #####
+#####################################################################################################
+---
+defaults:
+  unit: "°C"
+  decimals: "1"
+
+text_sensor:
+  - id: sa_outdoor_temp_state
+    platform: homeassistant
+    entity_id: ${entity}
+    internal: true
+    on_value:
+      then:
+        - script.execute: sa_outdoor_temp_refresh
+
+script:
+  - id: !extend page_home
+    then:
+      - script.execute: sa_outdoor_temp_refresh
+
+  - id: sa_outdoor_temp_refresh
+    mode: restart
+    then:
+      - lambda: |-
+          if (!is_device_ready_for_tasks()) return;
+          const std::string &s = id(sa_outdoor_temp_state).state;
+          if (s.empty() or s == "unavailable" or s == "unknown") return;  // Keep last value
+          disp1->set_component_text("home.outdoor_temp",
+                                    id(standalone_format_value)(s, ${decimals}, "${unit}",
+                                                                id(mui_decimal_separator), id(mui_unavailable)).c_str());
+...

@@ -1,0 +1,45 @@
+#####################################################################################################
+##### NSPANEL STANDALONE - Home page value (value01 .. value04) from a Home Assistant entity     #####
+#####                                                                                           #####
+##### vars:                                                                                     #####
+#####   value:       01 .. 04                                                                   #####
+#####   entity:      e.g. sensor.living_room_humidity                                           #####
+#####   icon:        MDI code point, e.g. "\uE58D" (mdi:water-percent)                          #####
+#####   unit:        text appended to numeric values (default "")                               #####
+#####   decimals:    decimals for numeric values (default 1)                                    #####
+#####   icon_color:  "R, G, B" (default "200, 204, 200")                                        #####
+#####   label_color: "R, G, B" (default "200, 204, 200")                                        #####
+#####################################################################################################
+---
+defaults:
+  unit: ""
+  decimals: "1"
+  icon_color: "200, 204, 200"
+  label_color: "200, 204, 200"
+
+text_sensor:
+  - id: sa_home_value${value}_state
+    platform: homeassistant
+    entity_id: ${entity}
+    internal: true
+    on_value:
+      then:
+        - script.execute: sa_home_value${value}_refresh
+
+script:
+  - id: !extend page_home
+    then:
+      - script.execute: sa_home_value${value}_refresh
+
+  - id: sa_home_value${value}_refresh
+    mode: restart
+    then:
+      - lambda: |-
+          if (!is_device_ready_for_tasks()) return;
+          disp1->set_component_text("home.value${value}_icon", "${icon}");
+          disp1->set_component_font_color("home.value${value}_icon", rgbTo565(std::vector<int32_t>{${icon_color}}));
+          disp1->set_component_font_color("home.value${value}", rgbTo565(std::vector<int32_t>{${label_color}}));
+          disp1->set_component_text("home.value${value}",
+                                    id(standalone_format_value)(id(sa_home_value${value}_state).state, ${decimals}, "${unit}",
+                                                                id(mui_decimal_separator), id(mui_unavailable)).c_str());
+...

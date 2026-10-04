@@ -1,0 +1,250 @@
+#####################################################################################################
+##### NSPANEL STANDALONE - Weather: home page picture + forecast pages (weather01 .. weather05) #####
+#####                                                                                           #####
+##### Tap the weather picture or the outdoor temperature on Home to open the forecast pages.    #####
+##### The forecast is requested with `weather.get_forecasts` when a weather page opens.         #####
+##### Requires HA support for ESPHome action responses and "Allow the device to perform        #####
+##### Home Assistant actions" in the ESPHome integration options.                              #####
+#####                                                                                           #####
+##### vars:                                                                                     #####
+#####   weather_entity:     e.g. weather.home                                                   #####
+#####   sun_entity:         default sun.sun (day/night pictures)                                #####
+#####   forecast_type:      daily | twice_daily | hourly (default daily)                        #####
+#####   relative_day_names: labels for the 5 pages                                              #####
+#####                       (default '"Today", "Tomorrow", "In 2 days", "In 3 days", "In 4 days"')
+#####################################################################################################
+---
+defaults:
+  sun_entity: sun.sun
+  forecast_type: daily
+  relative_day_names: '"Today", "Tomorrow", "In 2 days", "In 3 days", "In 4 days"'
+
+text_sensor:
+  - id: sa_weather_state
+    platform: homeassistant
+    entity_id: ${weather_entity}
+    internal: true
+    on_value:
+      then:
+        - script.execute: sa_weather_refresh
+
+  - id: sa_sun_state
+    platform: homeassistant
+    entity_id: ${sun_entity}
+    internal: true
+    on_value:
+      then:
+        - script.execute: sa_weather_refresh
+
+  # Units used by the weather entity
+  - id: sa_weather_unit_temperature
+    platform: homeassistant
+    entity_id: ${weather_entity}
+    attribute: temperature_unit
+    internal: true
+  - id: sa_weather_unit_wind_speed
+    platform: homeassistant
+    entity_id: ${weather_entity}
+    attribute: wind_speed_unit
+    internal: true
+  - id: sa_weather_unit_precipitation
+    platform: homeassistant
+    entity_id: ${weather_entity}
+    attribute: precipitation_unit
+    internal: true
+  - id: sa_weather_unit_pressure
+    platform: homeassistant
+    entity_id: ${weather_entity}
+    attribute: pressure_unit
+    internal: true
+
+globals:
+  - id: sa_weather_condition_pic  # Weather condition -> Nextion picture id
+    type: std::function<uint8_t(const std::string &, bool)>
+    initial_value: |-
+      [](const std::string &w, bool day) -> uint8_t {
+        if (w == "sunny") return day ? 2 : 15;
+        if (w == "cloudy") return 3;
+        if (w == "rainy") return 4;
+        if (w == "pouring") return 5;
+        if (w == "snowy") return 6;
+        if (w == "hail" or w == "snowy-rainy" or w == "snowy_rainy") return 7;
+        if (w == "fog") return 8;
+        if (w == "windy" or w == "windy-variant" or w == "windy_variant") return 9;
+        if (w == "lightning") return 10;
+        if (w == "partlycloudy") return day ? 11 : 12;
+        if (w == "lightning-rainy" or w == "lightning_rainy" or w == "exceptional") return day ? 13 : 14;
+        if (w == "clear-night" or w == "clear_night") return 15;
+        return 1;  // unknown / unavailable
+      }
+
+script:
+  ##### Home page picture #####
+  - id: !extend page_home
+    then:
+      - script.execute: sa_weather_refresh
+
+  - id: sa_weather_refresh
+    mode: restart
+    then:
+      - lambda: |-
+          if (!is_device_ready_for_tasks()) return;
+          const bool day = id(sa_sun_state).state != "below_horizon";
+          disp1->send_command_printf("home.weather.pic=%u",
+                                     id(sa_weather_condition_pic)(id(sa_weather_state).state, day));
+
+  ##### Forecast pages #####
+  - id: !extend standalone_page_render
+    then:
+      - lambda: |-
+          const std::string &page = current_page->state;
+          if (page.size() == 9 and page.rfind("weather0", 0) == 0 and page[8] >= '1' and page[8] <= '5')
+            sa_weather_forecast->execute(page[8] - '1');
+
+  - id: sa_weather_forecast
+    mode: restart
+    parameters:
+      day_index: int
+    then:
+      - lambda: |-
+          // Header: relative day + date
+          static const char *const relative_days[] = {${relative_day_names}};
+          disp1->set_component_text("day", relative_days[day_index]);
+          const ESPTime now = id(time_provider).now();
+          if (now.is_valid()) {
+            const ESPTime day = ESPTime::from_epoch_local(now.timestamp + day_index * 86400);
+            disp1->set_component_text("date", id(standalone_format_date)(day).c_str());
+          }
+      - if:
+          condition:
+            - lambda: return system_flags.api_ready;
+          then:
+            - homeassistant.action:
+                action: weather.get_forecasts
+                data:
+                  entity_id: ${weather_entity}
+                  type: ${forecast_type}
+                capture_response: true
+                on_success:
+                  - lambda: |-
+                      const std::string page = current_page->state;
+                      if (page.size() != 9 or page.rfind("weather0", 0) != 0) return;  // Page closed meanwhile
+                      const int idx = page[8] - '1';  // Page shown now (may differ from day_index)
+
+                      // Day window in local time
+                      const ESPTime now = id(time_provider).now();
+                      if (!now.is_valid()) return;
+                      const time_t midnight = now.timestamp - (now.hour * 3600 + now.minute * 60 + now.second);
+                      const time_t day_start = midnight + idx * 86400;
+                      const time_t day_end = day_start + 86400;
+
+                      // ISO 8601 ("2026-10-04T10:00:00+00:00") -> epoch
+                      auto parse_iso = [](const char *s, time_t &out) -> bool {
+                        int y, mo, d, h = 0, mi = 0, se = 0;
+                        if (s == nullptr or sscanf(s, "%d-%d-%dT%d:%d:%d", &y, &mo, &d, &h, &mi, &se) < 3) return false;
+                        long offset = 0;
+                        if (strlen(s) > 19) {
+                          const char *p = s + 19;
+                          while (*p and *p != '+' and *p != '-' and *p != 'Z') p++;
+                          if (*p == '+' or *p == '-') {
+                            int oh = 0, om = 0;
+                            sscanf(p + 1, "%d:%d", &oh, &om);
+                            offset = (oh * 60L + om) * 60L * (*p == '-' ? -1 : 1);
+                          }
+                        }
+                        y -= mo <= 2;
+                        const long era = (y >= 0 ? y : y - 399) / 400;
+                        const long yoe = y - era * 400;
+                        const long doy = (153 * (mo + (mo > 2 ? -3 : 9)) + 2) / 5 + d - 1;
+                        const long doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+                        const long days = era * 146097L + doe - 719468L;
+                        out = days * 86400L + h * 3600L + mi * 60L + se - offset;
+                        return true;
+                      };
+
+                      // Aggregate the forecast entries of that day
+                      JsonArrayConst forecast = response["${weather_entity}"]["forecast"];
+                      if (forecast.isNull()) forecast = response["forecast"];
+                      const float NA = NAN;
+                      float temp_min = NA, temp_max = NA, templow = NA, precipitation = NA, precip_prob = NA;
+                      float wind = NA, humidity = NA, pressure = NA, uv = NA, sun_hours = NA, thunder = NA;
+                      std::string condition;
+                      auto vmax = [](float &acc, JsonVariantConst v) { if (v.is<float>()) acc = std::isnan(acc) ? v.as<float>() : std::max(acc, v.as<float>()); };
+                      auto vmin = [](float &acc, JsonVariantConst v) { if (v.is<float>()) acc = std::isnan(acc) ? v.as<float>() : std::min(acc, v.as<float>()); };
+                      auto vsum = [](float &acc, JsonVariantConst v) { if (v.is<float>()) acc = (std::isnan(acc) ? 0 : acc) + v.as<float>(); };
+                      uint8_t entries = 0;
+                      for (JsonObjectConst e : forecast) {
+                        time_t t;
+                        if (!parse_iso(e["datetime"].as<const char *>(), t) or t < day_start or t >= day_end) continue;
+                        entries++;
+                        if (condition.empty() and e["condition"].is<const char *>()) condition = e["condition"].as<const char *>();
+                        vmax(temp_max, e["temperature"]);
+                        vmin(temp_min, e["temperature"]);
+                        vmin(templow, e["templow"]);
+                        vsum(precipitation, e["precipitation"]);
+                        vmax(precip_prob, e["precipitation_probability"]);
+                        vmax(wind, e["wind_speed"]);
+                        vmax(humidity, e["humidity"]);
+                        vmax(pressure, e["pressure"]);
+                        vmax(uv, e["uv_index"]);
+                        vsum(sun_hours, e["hours_of_sun"]);
+                        vmax(thunder, e["thunderstorm_probability"]);
+                      }
+                      if (!std::isnan(templow)) temp_min = templow;
+                      ESP_LOGD("${TAG_STANDALONE}", "Weather %s: %u forecast entries", page.c_str(), entries);
+
+                      // Clear the parameter rows
+                      for (uint8_t i = 1; i <= 5; i++) {
+                        disp1->set_component_text(("value0" + std::to_string(i)).c_str(), " ");
+                        disp1->set_component_text(("value0" + std::to_string(i) + "_icon").c_str(), " ");
+                      }
+                      if (entries == 0) {
+                        disp1->set_component_text("value01", id(mui_unavailable).c_str());
+                        return;
+                      }
+
+                      const bool is_day = idx > 0 or id(sa_sun_state).state != "below_horizon";
+                      disp1->send_command_printf("weather_icon.pic=%u", id(sa_weather_condition_pic)(condition, is_day));
+
+                      // Temperature min/max
+                      const std::string tu = id(sa_weather_unit_temperature).state;
+                      char buffer[40];
+                      if (!std::isnan(temp_min) and !std::isnan(temp_max) and lroundf(temp_min) != lroundf(temp_max))
+                        snprintf(buffer, sizeof(buffer), "%ld%s/%ld%s", lroundf(temp_min), tu.c_str(), lroundf(temp_max), tu.c_str());
+                      else if (!std::isnan(temp_max))
+                        snprintf(buffer, sizeof(buffer), "%ld%s", lroundf(temp_max), tu.c_str());
+                      else
+                        buffer[0] = '\0';
+                      disp1->set_component_text("temperature", buffer);
+
+                      // Up to 5 parameters, same order and icons as the blueprint
+                      std::vector<std::pair<const char *, std::string>> params;
+                      auto fmt = [](float v, const std::string &suffix) {
+                        char b[24];
+                        snprintf(b, sizeof(b), "%ld", lroundf(v));
+                        return std::string(b) + suffix;
+                      };
+                      if (!std::isnan(sun_hours)) params.push_back({"", fmt(sun_hours, " h")});        // mdi:white-balance-sunny
+                      if (!std::isnan(thunder)) params.push_back({"", fmt(thunder, "%")});             // mdi:weather-lightning
+                      if (!std::isnan(precipitation) or !std::isnan(precip_prob)) {                           // mdi:weather-pouring
+                        std::string v;
+                        if (!std::isnan(precipitation)) v += fmt(precipitation, " " + id(sa_weather_unit_precipitation).state);
+                        if (!std::isnan(precipitation) and !std::isnan(precip_prob)) v += " - ";
+                        if (!std::isnan(precip_prob)) v += fmt(precip_prob, "%");
+                        params.push_back({"", v});
+                      }
+                      if (!std::isnan(uv)) params.push_back({"", fmt(uv, "")});                         // mdi:shield-sun
+                      if (!std::isnan(wind)) params.push_back({"", fmt(wind, " " + id(sa_weather_unit_wind_speed).state)});  // mdi:weather-windy
+                      if (!std::isnan(humidity)) params.push_back({"", fmt(humidity, " %")});          // mdi:water-percent
+                      if (!std::isnan(pressure)) params.push_back({"", fmt(pressure, " " + id(sa_weather_unit_pressure).state)});  // mdi:gauge
+                      for (size_t i = 0; i < params.size() and i < 5; i++) {
+                        const std::string row = "value0" + std::to_string(i + 1);
+                        disp1->set_component_text((row + "_icon").c_str(), params[i].first);
+                        action_component_text->execute("", row, params[i].second);
+                      }
+                on_error:
+                  - lambda: |-
+                      ESP_LOGW("${TAG_STANDALONE}", "weather.get_forecasts failed: %s", error.c_str());
+                      if (current_page->state.rfind("weather0", 0) == 0)
+                        disp1->set_component_text("value01", id(mui_unavailable).c_str());
+...
