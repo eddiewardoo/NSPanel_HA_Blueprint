@@ -211,6 +211,8 @@ packages:
       ##### Home page #####
       - path: standalone/nspanel_standalone_home_weather.yaml
         vars: {weather_entity: weather.home}
+        # Optional vars: forecast_type: daily | twice_daily | hourly
+        #                relative_day_names: '"Heute", "Morgen", "In 2 Tagen", "In 3 Tagen", "In 4 Tagen"'
       - path: standalone/nspanel_standalone_home_outdoor_temp.yaml
         vars: {entity: sensor.wh_system_aussentemperatur, unit: "°C", decimals: 1}
       # Values 01-04 (local sensor: ..._home_value_local.yaml with sensor_id / HA entity: ..._home_value.yaml with entity)
@@ -258,7 +260,7 @@ packages:
       # - path: standalone/nspanel_standalone_hw_button_ha.yaml
       #   vars: {side: left, entity: light.xxx}
       - path: standalone/nspanel_standalone_hw_button_climate.yaml
-        vars: {side: right, on_mode: HEAT}
+        vars: {side: right, press_action: page}  # page = open climate page (like the blueprint) / toggle = heat <-> off
       # - path: standalone/nspanel_standalone_hw_button_ha.yaml
       #   vars: {side: right, entity: light.xxx}
 

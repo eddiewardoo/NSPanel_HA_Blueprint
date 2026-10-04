@@ -39,9 +39,11 @@ platform) and draws on the display itself. Clicks are handled on the device too.
    ```
 
 2. Put the former blueprint inputs in `substitutions:` (see the list in the example).
-3. Buttons that act on Home Assistant use `homeassistant.action`. In Home Assistant, go to
-   **Settings → Devices & services → ESPHome → (your panel) → Configure** and enable
-   **Allow the device to perform Home Assistant actions**.
+3. Buttons that act on Home Assistant, and the weather forecast pages, use `homeassistant.action`.
+   In Home Assistant, go to **Settings → Devices & services → ESPHome → (your panel) → Configure**
+   and enable **Allow the device to perform Home Assistant actions**. Without it, buttons show the
+   state but pressing them does nothing (Home Assistant logs a warning / raises a repair).
+   The forecast pages also need a Home Assistant version that returns action responses to ESPHome devices (ESPHome 2025.10+ feature).
 4. Flash, then disable the blueprint automation for this panel.
 
 Pin `ref` of **both** packages to the same release when you update. The standalone packages hook
@@ -52,7 +54,7 @@ into internal script names of the core firmware.
 | Blueprint input | Standalone YAML |
 |---|---|
 | Global: language, date/time format, colors, decimal separator, temperature unit | substitutions in `nspanel_standalone_base.yaml` (`time_format`, `date_format`, `weekday_names`, ...) |
-| `weather_entity` | `nspanel_standalone_home_weather.yaml` (`weather_entity`) |
+| `weather_entity` (home picture + forecast pages) | `nspanel_standalone_home_weather.yaml` (`weather_entity`, `forecast_type`, `relative_day_names`) |
 | `outdoortemp` | `nspanel_standalone_home_outdoor_temp.yaml` (`entity`) |
 | `indoortemp` = panel sensor | `embedded_indoor_temperature: "true"` |
 | `home_value01..04` | `nspanel_standalone_home_value.yaml` (HA entity) or `..._home_value_local.yaml` (sensor on the panel) |
@@ -60,7 +62,7 @@ into internal script names of the core firmware.
 | `home_button01..07` (custom buttons) | `nspanel_standalone_home_custom_button.yaml` |
 | `relay01_icon`, `relay02_icon`, local control / fallback | substitutions `relay01_icon`, `left_button_controls_relay1`, `relay_1_local_fallback`, ... |
 | `left/right_button_entity` (HA entity) | `nspanel_standalone_hw_button_ha.yaml` (`side`, `entity`) |
-| `left/right_button_entity` = embedded thermostat | `nspanel_standalone_hw_button_climate.yaml` (`side`) |
+| `left/right_button_entity` = embedded thermostat | `nspanel_standalone_hw_button_climate.yaml` (`side`, `press_action: page` opens the climate page like the blueprint, `toggle` switches heat/off) |
 | `left/right_button_name`, colors, bars | substitutions `left_button_name`, `hw_buttons_bar_color_on`, ... |
 | `climate` = embedded thermostat | `is_climate: "true"`, `embedded_climate: "true"` |
 | `entity01..32` (+ `_confirm`) | `nspanel_standalone_buttonpage_button.yaml` (`page` 01-04, `button` 01-08, `confirm`) |
@@ -81,7 +83,6 @@ These blueprint features need data or logic that only lives in Home Assistant te
 
 - Detail pages opened by a long press: light dimmer and color, cover position, fan, media player, alarm,
   and a Home Assistant climate entity. (The **embedded** thermostat page works: tap the indoor temperature.)
-- Weather forecast pages (weather01-05). The home weather icon works.
 - Utilities page.
 - Brightness % shown on light buttons.
 - Translated texts. Set `weekday_names`, `month_names`, `meridiem_*`, `mui_unavailable` and

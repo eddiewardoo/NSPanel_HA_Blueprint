@@ -68,6 +68,9 @@ script:
           condition:
             - lambda: return page == "buttonpage${page}" and event == "short_click" and component == "button${button}";
           then:
+            - lambda: |-
+                ESP_LOGI("${TAG_STANDALONE}", "Click %s/%s -> ${action} ${entity}", page.c_str(), component.c_str());
+                if (!system_flags.api_ready) ESP_LOGW("${TAG_STANDALONE}", "Home Assistant API not connected");
             - homeassistant.action:
                 action: ${action}
                 data:

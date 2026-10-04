@@ -42,6 +42,10 @@ script:
           condition:
             - lambda: return system_flags.api_ready;
           then:
+            - logger.log:
+                level: INFO
+                tag: ${TAG_STANDALONE}
+                format: "Hardware button ${side} -> homeassistant.toggle ${entity}"
             - homeassistant.action:
                 action: homeassistant.toggle
                 data:

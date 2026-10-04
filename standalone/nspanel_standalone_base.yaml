@@ -123,6 +123,25 @@ globals:
                  s == "idle" or s == "standby" or s == "locked" or s == "not_home" or s == "disarmed" or
                  s == "paused" or s == "none" or s == "0");
       }
+  - id: standalone_format_date  # Formats a date with `date_format` and the localized names
+    type: std::function<std::string(ESPTime)>
+    initial_value: |-
+      [](ESPTime t) -> std::string {
+        static const char *const weekdays[] = {${weekday_names}};
+        static const char *const weekdays_short[] = {${weekday_names_short}};
+        static const char *const months[] = {${month_names}};
+        static const char *const months_short[] = {${month_names_short}};
+        std::string fmt = "${date_format}";
+        auto replace_all = [&fmt](const std::string &token, const std::string &value) {
+          size_t pos;
+          while ((pos = fmt.find(token)) != std::string::npos) fmt.replace(pos, token.length(), value);
+        };
+        replace_all("%A", weekdays[t.day_of_week - 1]);
+        replace_all("%a", weekdays_short[t.day_of_week - 1]);
+        replace_all("%B", months[t.month - 1]);
+        replace_all("%b", months_short[t.month - 1]);
+        return t.strftime(fmt);
+      }
   - id: standalone_format_value  # Formats a state: numbers rounded + unit, others as-is
     type: std::function<std::string(const std::string &, int, const std::string &, const std::string &, const std::string &)>
     initial_value: |-
@@ -256,22 +275,9 @@ script:
     then:
       - lambda: |-
           if (system_flags.tft_upload_active) return;
-          ESPTime now = id(time_provider).now();
+          const ESPTime now = id(time_provider).now();
           if (!now.is_valid()) return;
-          static const char *const weekdays[] = {${weekday_names}};
-          static const char *const weekdays_short[] = {${weekday_names_short}};
-          static const char *const months[] = {${month_names}};
-          static const char *const months_short[] = {${month_names_short}};
-          std::string fmt = "${date_format}";
-          auto replace_all = [&fmt](const std::string &token, const std::string &value) {
-            size_t pos;
-            while ((pos = fmt.find(token)) != std::string::npos) fmt.replace(pos, token.length(), value);
-          };
-          replace_all("%A", weekdays[now.day_of_week - 1]);
-          replace_all("%a", weekdays_short[now.day_of_week - 1]);
-          replace_all("%B", months[now.month - 1]);
-          replace_all("%b", months_short[now.month - 1]);
-          disp1->set_component_text("home.date", now.strftime(fmt).c_str());
+          disp1->set_component_text("home.date", id(standalone_format_date)(now).c_str());
 
   ##### Pages and clicks dispatch #####
   - id: !extend page_change
